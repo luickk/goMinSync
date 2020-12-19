@@ -8,6 +8,9 @@ import (
   "io"
 )
 
+// hashes content of file
+// hashes path
+// returns sha256 hex encoded string
 func Sha256DirObj(path string) string {
   file, err := os.Open(path)
   if err != nil {
@@ -19,26 +22,35 @@ func Sha256DirObj(path string) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
-func FindSliceDifference(slice1 []string, slice2 []string) map[string]string {
-    var diff map[string]string
+// finds changes between new and old (key)path (val)hash map change
+// returns map of (key) type of change (val) hash of changed file
+func FindPathHashMapChange(new map[string]string, old map[string]string) map[string]string {
+  diff := make(map[string]string, 0)
+  fmt.Println(new)
+  fmt.Println(old)
+  for oldPath, oldHash := range old {
+    // path is not new to dir
+    // stayed the same
+    if newHash, ok := new[oldPath]; ok {
+      // file content did not change
+      if newHash == oldHash {
 
-    for i := 0; i < 2; i++ {
-        for _, s1 := range slice1 {
-            found := false
-            for _, s2 := range slice2 {
-                if s1 == s2 {
-                    found = true
-                    break
-                }
-            }
-            if !found {
-                diff["added"] = s1
-            }
-        }
-        if i == 0 {
-            slice1, slice2 = slice2, slice1
-        }
+      // file content did not change
+      } else {
+        diff["change"] = oldPath
+
+      }
+    // path is removed from dir
+    } else {
+      diff["removed"] = oldPath
     }
+  }
 
-    return diff
+  for newPath, _ := range new {
+    // path is added to dir
+    if _, ok := old[newPath]; !ok {
+      diff["added"] = newPath
+    }
+  }
+  return diff
 }

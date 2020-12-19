@@ -39,24 +39,32 @@ func main() {
 
 func fileChangeWatcher(dir string) chan *fileChange {
   fileChange := make(chan *fileChange)
-   for {
-      fileList := make([]string, 0)
-      fileHashList := make([]string, 0)
-      e := filepath.Walk(dir, func(path string, f os.FileInfo, err error) error {
-        fileList = append(fileList, path)
-        return err
-      })
-      if e != nil {
-        panic(e)
-      }
-      var hash string
-      for _, file := range fileList {
-        hash = util.Sha256DirObj(file)
-        fileHashList = append(fileHashList, hash)
-        fmt.Println(file + ": " + hash)
-      }
-      fmt.Println("-----")
-      time.Sleep(fileWatcherSyncFreq)
+  fileList := make([]string, 0)
+  pathHashMap := make(map[string]string, 0)
+  oldPathHashMap := make(map[string]string, 0)
+  var hash string
+  for {
+    e := filepath.Walk(dir, func(path string, f os.FileInfo, err error) error {
+      fileList = append(fileList, path)
+      return err
+    })
+    if e != nil {
+      panic(e)
     }
+    for _, file := range fileList {
+      hash = util.Sha256DirObj(file)
+      pathHashMap[file] = hash
+
+    }
+    changes := util.FindPathHashMapChange(pathHashMap, oldPathHashMap)
+
+    for change, path := range changes {
+      fmt.Println(change + ": " + path)
+    }
+
+    fmt.Println("-----")
+    oldPathHashMap = pathHashMap
+    time.Sleep(fileWatcherSyncFreq)
+  }
   return fileChange
 }
