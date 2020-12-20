@@ -60,6 +60,7 @@ func fileChangeWatcher(dir string) chan *fileChange {
     }
     changes := util.FindPathHashMapChange(pathHashMap, oldPathHashMap)
     for path, cType := range changes {
+      fmt.Println(cType)
       chg := new(fileChange)
       chg.Ctype = cType
       chg.DirPath = path
