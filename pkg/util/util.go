@@ -18,7 +18,13 @@ func Sha256DirObj(path string) string {
   }
   defer file.Close()
   hasher := sha256.New()
-  io.Copy(hasher, file)
+
+  _, err = io.Copy(hasher, file)
+  if err != nil {
+    // file content is either not hashable or a directory
+    fmt.Println(err)
+    return ""
+  }
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
@@ -26,8 +32,8 @@ func Sha256DirObj(path string) string {
 // returns map of (key) type of change (val) hash of changed file
 func FindPathHashMapChange(new map[string]string, old map[string]string) map[string]string {
   diff := make(map[string]string, 0)
-  fmt.Println(new)
-  fmt.Println(old)
+  // fmt.Println(new)
+  // fmt.Println(old)
   for oldPath, oldHash := range old {
     // path is not new to dir
     // stayed the same
@@ -35,21 +41,21 @@ func FindPathHashMapChange(new map[string]string, old map[string]string) map[str
       // file content did not change
       if newHash == oldHash {
 
-      // file content did not change
+      // file content did change
       } else {
-        diff["change"] = oldPath
+        diff[oldPath] = "changed"
 
       }
     // path is removed from dir
     } else {
-      diff["removed"] = oldPath
+      diff[oldPath] = "removed"
     }
   }
 
   for newPath, _ := range new {
     // path is added to dir
     if _, ok := old[newPath]; !ok {
-      diff["added"] = newPath
+      diff[newPath] = "added"
     }
   }
   return diff

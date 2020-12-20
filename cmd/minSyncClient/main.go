@@ -10,26 +10,25 @@ import (
   "goMinSync/pkg/util"
 )
 
-const (
-  added = iota
-  removed = iota
-  edited = iota
-)
-
 type fileChange struct {
-  cType int
-  fileHash string
-  timestamp string
+  Ctype string
+  DirPath string
+  Timestamp string
 }
 
-var fileWatcherSyncFreq time.Duration = time.Second * 1
+var fileWatcherSyncFreq time.Duration = time.Second * 5
 
 func main() {
 	_, err := syncClient.New("127.0.0.1", 8000)
 
   // should be located beneath err return of syncClient connect
-  fileChangeWatcher("/Users/luickklippel/Documents/Temp")
-
+  fileChange := fileChangeWatcher("/Users/luickklippel/Documents/Temp")
+  for {
+    select {
+    case chg := <-fileChange:
+      fmt.Println(chg.Timestamp + " " + chg.Ctype + ":" + chg.DirPath)
+    }
+  }
   if err != nil {
     fmt.Println(err)
     return
@@ -38,26 +37,35 @@ func main() {
 }
 
 func fileChangeWatcher(dir string) chan *fileChange {
-  fileChange := make(chan *fileChange)
-  fileList := make([]string, 0)
+  fileChangeCh := make(chan *fileChange)
   pathHashMap := make(map[string]string, 0)
   oldPathHashMap := make(map[string]string, 0)
   var hash string
   for {
-    e := filepath.Walk(dir, func(path string, f os.FileInfo, err error) error {
-      fileList = append(fileList, path)
+    err := filepath.Walk(dir, func(path string, f os.FileInfo, err error) error {
+      fi, err := os.Stat(path)
+      if err != nil {
+        fmt.Println(err)
+      }
+      if fi.Mode().IsRegular() {
+        hash = util.Sha256DirObj(path)
+        pathHashMap[path] = hash
+      } else {
+        pathHashMap[path] = ""
+      }
       return err
     })
-    if e != nil {
-      panic(e)
-    }
-    for _, file := range fileList {
-      hash = util.Sha256DirObj(file)
-      pathHashMap[file] = hash
-
+    if err != nil {
+      fmt.Println(err)
     }
     changes := util.FindPathHashMapChange(pathHashMap, oldPathHashMap)
-
+    for path, cType := range changes {
+      chg := new(fileChange)
+      chg.Ctype = cType
+      chg.DirPath = path
+      chg.Timestamp = time.Now().String()
+      fileChangeCh <- chg
+    }
     for change, path := range changes {
       fmt.Println(change + ": " + path)
     }
@@ -66,5 +74,5 @@ func fileChangeWatcher(dir string) chan *fileChange {
     oldPathHashMap = pathHashMap
     time.Sleep(fileWatcherSyncFreq)
   }
-  return fileChange
+  return fileChangeCh
 }
