@@ -1,9 +1,10 @@
 package util
 
 import (
-  "os"
   "crypto/sha256"
 	"encoding/hex"
+  "path/filepath"
+  "os"
   "fmt"
   "io"
 )
@@ -32,8 +33,6 @@ func Sha256DirObj(path string) string {
 // returns map of (key) type of change (val) hash of changed file
 func FindPathHashMapChange(new map[string]string, old map[string]string) map[string]string {
   diff := make(map[string]string, 0)
-  // fmt.Println(new)
-  // fmt.Println(old)
   for oldPath, oldHash := range old {
     // path is not new to dir
     // stayed the same
@@ -59,4 +58,26 @@ func FindPathHashMapChange(new map[string]string, old map[string]string) map[str
     }
   }
   return diff
+}
+
+func CreatePathHasMap(dir string) (map[string]string, error) {
+  var hash string
+  pathHashMap := make(map[string]string, 0)
+  err := filepath.Walk(dir, func(path string, f os.FileInfo, err error) error {
+    fi, err := os.Stat(path)
+    if err != nil {
+      return err
+    }
+    if fi.Mode().IsRegular() {
+      hash = Sha256DirObj(path)
+      pathHashMap[path] = hash
+    } else {
+      pathHashMap[path] = ""
+    }
+    return nil
+  })
+  if err != nil {
+    return nil, err
+  }
+  return pathHashMap, nil
 }
