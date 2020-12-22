@@ -20,28 +20,35 @@ type syncClient struct {
 	fileWatcherSyncFreq time.Duration
 }
 
-func New(address string, port int) (syncClient, error) {
+func New() syncClient {
 	var sC syncClient
-	cClient, err := connectToRemoteCache(address, port)
 	sC.fileWatcherSyncFreq = time.Second * 5
 	sC.ChangeStream = make(chan *fileChange)
-	if err != nil {
-		fmt.Println(err)
-		return sC, err
-	}
-	sC.cacheClient = cClient
-	return sC, nil
+	return sC
 }
 
-func connectToRemoteCache(address string, port int) (cacheClient.RemoteCache, error) {
+func (sC *syncClient)ConnectToRemoteInstance(address string, port int) error {
+	// unencryptd (for testing purposes)
 	client, err := cacheClient.New(address, port, false, "", "")
   if err != nil {
-    fmt.Println(err)
-    return client, err
+    return err
   }
-	return client, err
+	sC.cacheClient = client
+	return nil
 }
 
+func (sC *syncClient)StartSyncToRemoteInstance() {
+	go func() {
+		for {
+			select {
+			case chg := <-sC.ChangeStream:
+				fmt.Println(chg.Ctype + ":" + chg.DirPath)
+				// writing to connected cache to key Dir-Path with value change-type
+				sC.cacheClient.AddValByKey(chg.DirPath, []byte(chg.Ctype))
+			}
+		}
+	}()
+}
 
 func (sc *syncClient)AddDir(dir string) {
   go func(){
