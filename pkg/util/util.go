@@ -60,20 +60,29 @@ func FindPathHashMapChange(new map[string]string, old map[string]string) map[str
   return diff
 }
 
-func CreatePathHasMap(dir string) (map[string]string, error) {
+func HashFile(filePath string) (string, error) {
+  var hash string
+  fi, err := os.Stat(filePath)
+  if err != nil {
+    return "", err
+  }
+  if fi.Mode().IsRegular() {
+    hash = Sha256DirObj(filePath)
+  } else {
+    return "", nil
+  }
+  if err != nil {
+    return "", err
+  }
+  return hash, nil
+}
+
+func CreatePathHashMap(dir string) (map[string]string, error) {
   var hash string
   pathHashMap := make(map[string]string, 0)
   err := filepath.Walk(dir, func(path string, f os.FileInfo, err error) error {
-    fi, err := os.Stat(path)
-    if err != nil {
-      return err
-    }
-    if fi.Mode().IsRegular() {
-      hash = Sha256DirObj(path)
+      hash, err = HashFile(path)
       pathHashMap[path] = hash
-    } else {
-      pathHashMap[path] = ""
-    }
     return nil
   })
   if err != nil {

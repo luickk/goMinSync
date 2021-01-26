@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-  "remoteCacheToGo/cmd/cacheClient"
+  "remoteCacheToGo/cacheClient"
 )
 
 

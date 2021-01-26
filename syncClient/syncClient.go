@@ -3,8 +3,8 @@ package syncClient
 import (
 	"fmt"
 	"time"
-
-  "remoteCacheToGo/cmd/cacheClient"
+	"log"
+	"goMinSync/pkg/remoteCacheToGo/cacheClient"
   "goMinSync/pkg/util"
 )
 
@@ -39,12 +39,28 @@ func (sC *syncClient)ConnectToRemoteInstance(address string, port int) error {
 
 func (sC *syncClient)StartSyncToRemoteInstance() {
 	go func() {
+		var (
+			dirPath string
+			changeType string
+		)
+		subCh := sC.cacheClient.Subscribe()
 		for {
 			select {
-			case chg := <-sC.ChangeStream:
+			case chg := <- sC.ChangeStream:
 				fmt.Println(chg.Ctype + ":" + chg.DirPath)
 				// writing to connected cache to key Dir-Path with value change-type
 				sC.cacheClient.AddValByKey(chg.DirPath, []byte(chg.Ctype))
+			case changed := <- subCh:
+				changeType = string(changed.Data)
+				dirPath = changed.Key
+				switch changeType {
+				case "changed":
+					fmt.Println("changed smth: " + changeType + ": " + dirPath)
+				case "removed":
+					fmt.Println("changed smth: " + changeType + ": " + dirPath)
+				case "added":
+					fmt.Println("changed smth: " + changeType + ": " + dirPath)
+				}
 			}
 		}
 	}()
@@ -56,7 +72,7 @@ func (sc *syncClient)AddDir(dir string) {
     pathHashMap := make(map[string]string, 0)
     var err error
     for {
-      pathHashMap, err = util.CreatePathHasMap(dir)
+      pathHashMap, err = util.CreatePathHashMap(dir)
       if err != nil {
         fmt.Println(err)
       }
@@ -66,7 +82,7 @@ func (sc *syncClient)AddDir(dir string) {
       for path, cType := range changes {
         chg := new(fileChange)
         chg.Ctype = cType
-        chg.DirPath = path
+			  chg.DirPath = path
         chg.Timestamp = time.Now().String()
         sc.ChangeStream <- chg
       }

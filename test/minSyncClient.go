@@ -2,8 +2,8 @@ package main
 
 import (
   "fmt"
-  
-	"goMinSync/pkg/syncClient"
+
+	"goMinSync/syncClient"
 )
 
 
