@@ -3,6 +3,7 @@ package serverInstance
 import (
 	"crypto/tls"
 	"net/http"
+	"strconv"
 	"fmt"
 
 	"goMinSync/pkg/remoteCacheToGo/cache"
@@ -30,12 +31,12 @@ func (instance serverInstance) StartInstance() error {
 	http.Handle("/upload", instance.fileServer)
 	http.Handle("/files/", instance.fileServer)
 
-	if instance.tlsCert != "" && instance.tlsCert != ""{
-		go instance.cache.RemoteTlsConnHandler(instance.syncPort, instance.token, false, instance.tlsCert, instance.tlsKey)
+	if instance.tlsCert != "" && instance.tlsCert != "" {
+		// params: port int, bindAddress string, pwHash string, dosProtection bool, serverCert string, serverKey string
+		go instance.cache.RemoteTlsConnHandler(instance.syncPort, instance.address, instance.token, false, instance.tlsCert, instance.tlsKey)
 
 		cert, err := tls.X509KeyPair([]byte(instance.tlsCert), []byte(instance.tlsKey))
 		if err != nil {
-			fmt.Println(err)
 			return err
 		}
 		tlsConnServer := http.Server{
@@ -47,8 +48,8 @@ func (instance serverInstance) StartInstance() error {
 			return err
 		}
 	} else {
-		go instance.cache.RemoteConnHandler(instance.syncPort)
-		if err := http.ListenAndServe(fmt.Sprintf("%s:%d", instance.address, instance.fileServerPort), nil); err != nil {
+		go instance.cache.RemoteConnHandler(instance.address, instance.syncPort)
+		if err := http.ListenAndServe(instance.address+":"+strconv.Itoa(instance.fileServerPort), nil); err != nil {
 			return err
 		}
 	}
