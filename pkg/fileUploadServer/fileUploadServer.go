@@ -32,17 +32,19 @@ type Server struct {
 	DocumentRoot string
 	// MaxUploadSize limits the size of the uploaded content, specified with "byte".
 	MaxUploadSize int64
-	SecureToken   string
-	EnableCORS    bool
+	TokenEnabled bool
+	SecureToken string
+	EnableCORS bool
 }
 
 // NewServer creates a new simple-upload server.
-func NewServer(documentRoot string, maxUploadSize int64, token string, enableCORS bool) Server {
+func NewServer(documentRoot string, maxUploadSize int64, tokenEnabled bool, token string, enableCORS bool) Server {
 	return Server{
-		DocumentRoot:  documentRoot,
+		DocumentRoot: documentRoot,
 		MaxUploadSize: maxUploadSize,
-		SecureToken:   token,
-		EnableCORS:    enableCORS,
+		TokenEnabled: tokenEnabled,
+		SecureToken: token,
+		EnableCORS: enableCORS,
 	}
 }
 
@@ -212,10 +214,12 @@ func (s Server) checkToken(r *http.Request) error {
 }
 
 func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if err := s.checkToken(r); err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		writeError(w, err)
-		return
+	if s.TokenEnabled {
+		if err := s.checkToken(r); err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			writeError(w, err)
+			return
+		}
 	}
 
 	switch r.Method {

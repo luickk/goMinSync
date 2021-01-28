@@ -151,6 +151,14 @@ func HashFile(filePath string) (string, error) {
   return hash, nil
 }
 
+func IsDirectory(path string) (bool, error) {
+    fileInfo, err := os.Stat(path)
+    if err != nil{
+      return false, err
+    }
+    return fileInfo.IsDir(), err
+}
+
 func CreatePathHashMap(dir string) (map[string]string, error) {
   var hash string
   pathHashMap := make(map[string]string, 0)

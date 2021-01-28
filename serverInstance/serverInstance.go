@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"net/http"
 	"strconv"
-	"fmt"
 
 	"goMinSync/pkg/remoteCacheToGo/cache"
 	"goMinSync/pkg/fileUploadServer"
@@ -24,7 +23,24 @@ type serverInstance struct {
 }
 
 func New(serverRoot string, maxUploadSize int64, token string, address string, syncPort int, fileServerPort int, tlsCert string, tlsKey string) serverInstance {
-	return serverInstance { cache.New(), fileUploadServer.NewServer(serverRoot, maxUploadSize, token, false), serverRoot, maxUploadSize, token, address, syncPort, fileServerPort, tlsCert, tlsKey }
+	var tokenEnabled bool
+	if tlsCert == "" && tlsKey == "" {
+		tokenEnabled = false
+	} else {
+		tokenEnabled = true
+	}
+	return serverInstance {
+		cache.New(),
+		fileUploadServer.NewServer(serverRoot, maxUploadSize, tokenEnabled, token, false),
+		serverRoot,
+		maxUploadSize,
+		token,
+		address,
+		syncPort,
+		fileServerPort,
+		tlsCert,
+		tlsKey,
+	}
 }
 
 func (instance serverInstance) StartInstance() error {
@@ -44,7 +60,7 @@ func (instance serverInstance) StartInstance() error {
 				Certificates: []tls.Certificate{cert},
 			},
 		}
-		if err := tlsConnServer.ListenAndServeTLS(fmt.Sprintf("%s:%d", instance.address, instance.fileServerPort), ""); err != nil {
+		if err := tlsConnServer.ListenAndServeTLS(instance.address+":"+strconv.Itoa(instance.fileServerPort), ""); err != nil {
 			return err
 		}
 	} else {

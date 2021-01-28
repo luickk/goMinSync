@@ -3,6 +3,7 @@ package syncClient
 import (
 	"fmt"
 	"time"
+	"strconv"
 
 	"goMinSync/pkg/remoteCacheToGo/cacheClient"
   "goMinSync/pkg/util"
@@ -66,9 +67,18 @@ func (sC *syncClient)StartSyncToRemote() {
 				sC.cacheClient.AddValByKey(chg.DirPath, encodedChg)
 
 				if sC.tlsEnabled {
-
+					// todo
 				} else {
-					// util.PostUploadFile("http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload", chg.DirPath, "dataLoL")
+					ok, err := util.IsDirectory(chg.DirPath)
+					if err != nil {
+						return
+					}
+					if ok {
+						_, err := util.PostUploadFile("http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token=empty", chg.DirPath, "file")
+						if err != nil {
+							return
+						}
+					}
 				}
 			}
 		}
