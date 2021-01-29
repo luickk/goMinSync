@@ -151,6 +151,40 @@ func HashFile(filePath string) (string, error) {
   return hash, nil
 }
 
+
+func Hash(toHash []byte) (string, error) {
+  hasher := sha256.New()
+  _, err := io.Writer(hasher).Write(toHash)
+  if err != nil {
+    // file content is either not hashable or a directory
+    fmt.Println(err)
+    return "", err
+  }
+	return hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+func CreateFileSig(path string) (string, error) {
+  var (
+    err error
+    filePathHash string
+    fileHash string
+    fileSig string
+  )
+  filePathHash, err = Hash([]byte(path))
+  if err != nil {
+    return "", err
+  }
+  fileHash, err = HashFile(path)
+  if err != nil {
+    return "", err
+  }
+  fileSig, err = Hash([]byte(filePathHash+fileHash))
+  if err != nil {
+    return "", err
+  }
+  return fileSig, nil
+}
+
 func IsDirectory(path string) (bool, error) {
     fileInfo, err := os.Stat(path)
     if err != nil{

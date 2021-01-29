@@ -1,10 +1,9 @@
 // by https://github.com/mayth/go-simple-upload-server
-// repository is not cloned since I made slight adjustments
+// repository is not cloned due to major changes!
 
 package fileUploadServer
 
 import (
-	"crypto/sha1"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +14,8 @@ import (
 	"path"
 	"regexp"
 	"strings"
+
+	"goMinSync/pkg/util"
 )
 
 var (
@@ -81,14 +82,25 @@ func (s Server) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	body, err := ioutil.ReadAll(srcFile)
+
+	newName := r.URL.Query().Get("token")
+	var filename string
+	if newName != "" {
+		filename = newName
+	} else {
+		if info.Filename == "" {
+			filename, err = util.Hash(body)
+			if err != nil {
+				return
+			}
+		}
+		filename = info.Filename
+	}
+
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		writeError(w, err)
 		return
-	}
-	filename := info.Filename
-	if filename == "" {
-		filename = fmt.Sprintf("%x", sha1.Sum(body))
 	}
 
 	dstPath := path.Join(s.DocumentRoot, filename)

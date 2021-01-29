@@ -12,6 +12,7 @@ import (
 type syncClient struct {
 	address string
 	syncPort int
+	token string
 	fileServerPort int
 	tlsEnabled bool
 
@@ -36,6 +37,7 @@ func (sC *syncClient)ConnectToRemoteInstance(address string, syncPort int, fileS
 		return err
 	}
 
+	sC.token = token
   sC.cacheClient = client
 	sC.address = address
 	sC.syncPort = syncPort
@@ -67,7 +69,16 @@ func (sC *syncClient)StartSyncToRemote() {
 				sC.cacheClient.AddValByKey(chg.DirPath, encodedChg)
 
 				if sC.tlsEnabled {
-					// todo
+					ok, err := util.IsDirectory(chg.DirPath)
+					if err != nil {
+						return
+					}
+					if ok {
+						_, err := util.PostUploadFile("http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token="+sC.token+"", chg.DirPath, "file")
+						if err != nil {
+							return
+						}
+					}
 				} else {
 					ok, err := util.IsDirectory(chg.DirPath)
 					if err != nil {
@@ -129,7 +140,7 @@ func (sc *syncClient)AddDir(dir string) {
         chg := new(util.FileChange)
         chg.Ctype = cType
 			  chg.DirPath = path
-				chg.FileHash, err = util.HashFile(path)
+				chg.FileHash, err = util.HashFile(chg.DirPath)
 				if err != nil {
 					return
 				}
