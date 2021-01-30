@@ -83,7 +83,7 @@ func (s Server) handlePost(w http.ResponseWriter, r *http.Request) {
 
 	body, err := ioutil.ReadAll(srcFile)
 
-	newName := r.URL.Query().Get("token")
+	newName := r.URL.Query().Get("name")
 	var filename string
 	if newName != "" {
 		filename = newName

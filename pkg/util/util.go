@@ -3,11 +3,13 @@ package util
 import (
   "crypto/sha256"
 	"encoding/hex"
-  "path/filepath"
   "encoding/json"
   "net/http"
   "mime/multipart"
   "io/ioutil"
+  "path/filepath"
+
+  // "strings"
   "bytes"
   "os"
   "fmt"
@@ -113,11 +115,9 @@ func FindPathHashMapChange(new map[string]string, old map[string]string) map[str
     if newHash, ok := new[oldPath]; ok {
       // file content did not change
       if newHash == oldHash {
-
       // file content did change
       } else {
         diff[oldPath] = "changed"
-
       }
     // path is removed from dir
     } else {
@@ -196,9 +196,11 @@ func IsDirectory(path string) (bool, error) {
 func CreatePathHashMap(dir string) (map[string]string, error) {
   var hash string
   pathHashMap := make(map[string]string, 0)
-  err := filepath.Walk(dir, func(path string, f os.FileInfo, err error) error {
-      hash, err = HashFile(path)
-      pathHashMap[path] = hash
+
+  err := filepath.Walk(dir, func(absPath string, f os.FileInfo, err error) error {
+    hash, err = HashFile(absPath)
+    // relPath := strings.Trim(absPath, dir)
+    pathHashMap[absPath] = hash
     return nil
   })
   if err != nil {

@@ -67,14 +67,13 @@ func (sC *syncClient)StartSyncToRemote() {
 				fmt.Println(chg.Ctype + ":" + chg.DirPath)
 				// writing to connected cache to key Dir-Path with value change-type
 				sC.cacheClient.AddValByKey(chg.DirPath, encodedChg)
-
 				if sC.tlsEnabled {
 					ok, err := util.IsDirectory(chg.DirPath)
 					if err != nil {
 						return
 					}
-					if ok {
-						_, err := util.PostUploadFile("http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token="+sC.token+"", chg.DirPath, "file")
+					if !ok {
+						_, err := util.PostUploadFile("http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token="+sC.token+"&name="+chg.FileHash, chg.DirPath, "file")
 						if err != nil {
 							return
 						}
@@ -84,8 +83,8 @@ func (sC *syncClient)StartSyncToRemote() {
 					if err != nil {
 						return
 					}
-					if ok {
-						_, err := util.PostUploadFile("http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token=empty", chg.DirPath, "file")
+					if !ok {
+						_, err := util.PostUploadFile("http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token=empty"+"&name="+chg.FileHash, chg.DirPath, "file")
 						if err != nil {
 							return
 						}
