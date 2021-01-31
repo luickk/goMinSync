@@ -9,7 +9,6 @@ import (
   "io/ioutil"
   "path/filepath"
 
-  // "strings"
   "bytes"
   "os"
   "fmt"
@@ -18,9 +17,11 @@ import (
 
 type FileChange struct {
   Ctype string
-  DirPath string
+  AbsPath string
+  RelPath string
   FileHash string
   Timestamp string
+  IsDir bool
 }
 
 func EncodeMsg(msg *FileChange) ([]byte, error) {
@@ -109,6 +110,7 @@ func Sha256DirObj(path string) string {
 // returns map of (key) type of change (val) hash of changed file
 func FindPathHashMapChange(new map[string]string, old map[string]string) map[string]string {
   diff := make(map[string]string, 0)
+
   for oldPath, oldHash := range old {
     // path is not new to dir
     // stayed the same
@@ -194,13 +196,18 @@ func IsDirectory(path string) (bool, error) {
 }
 
 func CreatePathHashMap(dir string) (map[string]string, error) {
-  var hash string
+  var (
+    hash string
+    relPath string
+  )
   pathHashMap := make(map[string]string, 0)
 
   err := filepath.Walk(dir, func(absPath string, f os.FileInfo, err error) error {
     hash, err = HashFile(absPath)
-    // relPath := strings.Trim(absPath, dir)
-    pathHashMap[absPath] = hash
+    relPath = absPath[len(dir):]
+    if relPath != "" {
+      pathHashMap[relPath] = hash
+    }
     return nil
   })
   if err != nil {

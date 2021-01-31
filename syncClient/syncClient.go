@@ -1,9 +1,9 @@
 package syncClient
 
 import (
-	"fmt"
 	"time"
 	"strconv"
+	"fmt"
 
 	"goMinSync/pkg/remoteCacheToGo/cacheClient"
   "goMinSync/pkg/util"
@@ -64,27 +64,19 @@ func (sC *syncClient)StartSyncToRemote() {
 				if err != nil {
 					return
 				}
-				fmt.Println(chg.Ctype + ":" + chg.DirPath)
+				fmt.Println(chg.Ctype + ":" + chg.RelPath)
 				// writing to connected cache to key Dir-Path with value change-type
-				sC.cacheClient.AddValByKey(chg.DirPath, encodedChg)
+				sC.cacheClient.AddValByKey(chg.RelPath, encodedChg)
 				if sC.tlsEnabled {
-					ok, err := util.IsDirectory(chg.DirPath)
-					if err != nil {
-						return
-					}
-					if !ok {
-						_, err := util.PostUploadFile("http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token="+sC.token+"&name="+chg.FileHash, chg.DirPath, "file")
+					if !chg.IsDir {
+						_, err := util.PostUploadFile("http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token="+sC.token+"&name="+chg.FileHash, chg.AbsPath, "file")
 						if err != nil {
 							return
 						}
 					}
 				} else {
-					ok, err := util.IsDirectory(chg.DirPath)
-					if err != nil {
-						return
-					}
-					if !ok {
-						_, err := util.PostUploadFile("http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token=empty"+"&name="+chg.FileHash, chg.DirPath, "file")
+					if !chg.IsDir {
+						_, err := util.PostUploadFile("http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token=empty"+"&name="+chg.FileHash, chg.AbsPath, "file")
 						if err != nil {
 							return
 						}
@@ -111,11 +103,11 @@ func (sC *syncClient)StartSyncFromRemote() {
 				dirPath = changed.Key
 				switch changeMsg.Ctype {
 				case "changed":
-					fmt.Println("changed smth: " + changeMsg.FileHash + ": " + dirPath)
+					fmt.Println("sub receive: " + changeMsg.Ctype + ": " + dirPath)
 				case "removed":
-					fmt.Println("changed smth: " + changeMsg.FileHash + ": " + dirPath)
+					fmt.Println("sub receive: " + changeMsg.Ctype + ": " + dirPath)
 				case "added":
-					fmt.Println("changed smth: " + changeMsg.FileHash + ": " + dirPath)
+					fmt.Println("sub receive: " + changeMsg.Ctype + ": " + dirPath)
 				}
 			}
 		}
@@ -130,7 +122,7 @@ func (sc *syncClient)AddDir(dir string) {
     for {
       pathHashMap, err = util.CreatePathHashMap(dir)
       if err != nil {
-        fmt.Println(err)
+				return
       }
 
       changes := util.FindPathHashMapChange(pathHashMap, oldPathHashMap)
@@ -138,11 +130,17 @@ func (sc *syncClient)AddDir(dir string) {
       for path, cType := range changes {
         chg := new(util.FileChange)
         chg.Ctype = cType
-			  chg.DirPath = path
-				chg.FileHash, err = util.HashFile(chg.DirPath)
+			  chg.RelPath = path
+			  chg.AbsPath = dir+chg.RelPath
+				chg.FileHash, err = util.HashFile(chg.AbsPath)
 				if err != nil {
 					return
 				}
+				ok, err := util.IsDirectory(chg.AbsPath)
+				if err != nil {
+					return
+				}
+				chg.IsDir = ok
         chg.Timestamp = time.Now().String()
         sc.ChangeStream <- chg
       }
