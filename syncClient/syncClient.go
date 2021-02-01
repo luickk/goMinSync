@@ -3,6 +3,7 @@ package syncClient
 import (
 	"time"
 	"strconv"
+	"os"
 	"fmt"
 
 	"goMinSync/pkg/remoteCacheToGo/cacheClient"
@@ -17,14 +18,14 @@ type syncClient struct {
 	tlsEnabled bool
 
 	cacheClient cacheClient.RemoteCache
-	ChangeStream chan *util.FileChange
+	ChangeStream chan util.FileChange
 	fileWatcherSyncFreq time.Duration
 }
 
 func New() syncClient {
 	var sC syncClient
 	sC.fileWatcherSyncFreq = time.Second * 5
-	sC.ChangeStream = make(chan *util.FileChange)
+	sC.ChangeStream = make(chan util.FileChange)
 	return sC
 }
 
@@ -60,7 +61,7 @@ func (sC *syncClient)StartSyncToRemote() {
 		for {
 			select {
 			case chg := <- sC.ChangeStream:
-				encodedChg, err = util.EncodeMsg(chg)
+				encodedChg, err = util.EncodeMsg(&chg)
 				if err != nil {
 					return
 				}
@@ -87,7 +88,7 @@ func (sC *syncClient)StartSyncToRemote() {
 	}()
 }
 
-func (sC *syncClient)StartSyncFromRemote() {
+func (sC *syncClient)StartSyncFromRemote(dir string) {
 	var (
 		dirPath string
 	)
@@ -105,9 +106,28 @@ func (sC *syncClient)StartSyncFromRemote() {
 				case "changed":
 					fmt.Println("sub receive: " + changeMsg.Ctype + ": " + dirPath)
 				case "removed":
-					fmt.Println("sub receive: " + changeMsg.Ctype + ": " + dirPath)
+					if _, err := os.Stat(dir+changeMsg.RelPath); err == nil {
+						err := os.Remove(dir+changeMsg.RelPath)
+						if err != nil {
+						    fmt.Println(err)
+						}
+						fmt.Println("sub receive: " + changeMsg.Ctype + ": " + dirPath)
+					}
 				case "added":
-					fmt.Println("sub receive: " + changeMsg.Ctype + ": " + dirPath)
+					if _, err := os.Stat(dir+changeMsg.RelPath); os.IsNotExist(err) {
+						if changeMsg.IsDir {
+							os.MkdirAll(dir+changeMsg.RelPath, os.ModePerm)
+						} else {
+							if sC.tlsEnabled {
+								util.DownloadFile(dir+changeMsg.RelPath, "https://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/files/"+changeMsg.FileHash+"?token="+sC.token)
+							} else {
+								util.DownloadFile(dir+changeMsg.RelPath, "http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/"+changeMsg.FileHash+"?token=empty")
+							}
+							fmt.Println("sub receive: " + changeMsg.Ctype + ": " + dirPath)
+						}
+					} else {
+						fmt.Println("exists already")
+					}
 				}
 			}
 		}
@@ -125,24 +145,13 @@ func (sc *syncClient)AddDir(dir string) {
 				return
       }
 
-      changes := util.FindPathHashMapChange(pathHashMap, oldPathHashMap)
+      changes, err := util.FindPathHashMapChange(pathHashMap, oldPathHashMap, dir)
+			if err != nil {
+				fmt.Println(err)
+			}
       oldPathHashMap = pathHashMap
-      for path, cType := range changes {
-        chg := new(util.FileChange)
-        chg.Ctype = cType
-			  chg.RelPath = path
-			  chg.AbsPath = dir+chg.RelPath
-				chg.FileHash, err = util.HashFile(chg.AbsPath)
-				if err != nil {
-					return
-				}
-				ok, err := util.IsDirectory(chg.AbsPath)
-				if err != nil {
-					return
-				}
-				chg.IsDir = ok
-        chg.Timestamp = time.Now().String()
-        sc.ChangeStream <- chg
+      for _, change := range changes {
+        sc.ChangeStream <- change
       }
       fmt.Println("-----")
       time.Sleep(sc.fileWatcherSyncFreq)

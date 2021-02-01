@@ -18,8 +18,8 @@ func main() {
 
   // should be located beneath err return of syncClient connect
   sC.AddDir("/Users/luickklippel/Documents/Temp Local")
-
   sC.StartSyncToRemote()
-  sC.StartSyncFromRemote()
+
+  sC.StartSyncFromRemote("/Users/luickklippel/Documents/test")
   for {}
 }

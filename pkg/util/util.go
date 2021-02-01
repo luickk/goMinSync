@@ -9,6 +9,7 @@ import (
   "io/ioutil"
   "path/filepath"
 
+  "time"
   "bytes"
   "os"
   "fmt"
@@ -86,6 +87,36 @@ func PostUploadFile(url string, filePath string, filetype string) ([]byte, error
   return content, nil
 }
 
+// by https://stackoverflow.com/questions/11692860/how-can-i-efficiently-download-a-large-file-using-go
+func DownloadFile(filepath string, url string) (err error) {
+  // Create the file
+  out, err := os.Create(filepath)
+  if err != nil  {
+    return err
+  }
+  defer out.Close()
+
+  // Get the data
+  resp, err := http.Get(url)
+  if err != nil {
+    return err
+  }
+  defer resp.Body.Close()
+
+  // Check server response
+  if resp.StatusCode != http.StatusOK {
+    return fmt.Errorf("bad status: %s", resp.Status)
+  }
+
+  // Writer the body to file
+  _, err = io.Copy(out, resp.Body)
+  if err != nil  {
+    return err
+  }
+
+  return nil
+}
+
 // hashes content of file
 // hashes path
 // returns sha256 hex encoded string
@@ -108,8 +139,8 @@ func Sha256DirObj(path string) string {
 
 // finds changes between new and old (key)path (val)hash map change
 // returns map of (key) type of change (val) hash of changed file
-func FindPathHashMapChange(new map[string]string, old map[string]string) map[string]string {
-  diff := make(map[string]string, 0)
+func FindPathHashMapChange(new map[string]string, old map[string]string, dir string) ([]FileChange, error) {
+  changes := []FileChange{}
 
   for oldPath, oldHash := range old {
     // path is not new to dir
@@ -119,21 +150,29 @@ func FindPathHashMapChange(new map[string]string, old map[string]string) map[str
       if newHash == oldHash {
       // file content did change
       } else {
-        diff[oldPath] = "changed"
+        ok, err := IsDirectory(dir+oldPath)
+        if err != nil {
+          return nil, err
+        }
+        changes = append(changes, FileChange{ "changed", dir+oldPath, oldPath, oldHash, time.Now().String(), ok })
       }
     // path is removed from dir
     } else {
-      diff[oldPath] = "removed"
+      changes = append(changes, FileChange{ "removed", dir+oldPath, oldPath, oldHash, time.Now().String(), false })
     }
   }
 
-  for newPath, _ := range new {
+  for newPath, newHash := range new {
     // path is added to dir
     if _, ok := old[newPath]; !ok {
-      diff[newPath] = "added"
+      ok, err := IsDirectory(dir+newPath)
+      if err != nil {
+        return nil, err
+      }
+      changes = append(changes, FileChange{ "added", dir+newPath, newPath, newHash, time.Now().String(), ok })
     }
   }
-  return diff
+  return changes, nil
 }
 
 func HashFile(filePath string) (string, error) {
