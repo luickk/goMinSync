@@ -9,7 +9,6 @@ import (
   "io/ioutil"
   "path/filepath"
 
-  "time"
   "bytes"
   "os"
   "fmt"
@@ -21,8 +20,9 @@ type FileChange struct {
   AbsPath string
   RelPath string
   FileHash string
-  Timestamp string
   IsDir bool
+  SyncGroup int
+  OriginId int
 }
 
 func EncodeMsg(msg *FileChange) ([]byte, error) {
@@ -120,7 +120,7 @@ func DownloadFile(filepath string, url string) (err error) {
 // hashes content of file
 // hashes path
 // returns sha256 hex encoded string
-func Sha256DirObj(path string) string {
+func Sha256DirObj(path string) (string, error) {
   file, err := os.Open(path)
   if err != nil {
     fmt.Println(err)
@@ -132,9 +132,9 @@ func Sha256DirObj(path string) string {
   if err != nil {
     // file content is either not hashable or a directory
     fmt.Println(err)
-    return ""
+    return "", err
   }
-	return hex.EncodeToString(hasher.Sum(nil))
+	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
 // finds changes between new and old (key)path (val)hash map change
@@ -154,11 +154,11 @@ func FindPathHashMapChange(new map[string]string, old map[string]string, dir str
         if err != nil {
           return nil, err
         }
-        changes = append(changes, FileChange{ "changed", dir+oldPath, oldPath, oldHash, time.Now().String(), ok })
+        changes = append(changes, FileChange{ "changed", dir+oldPath, oldPath, oldHash, ok, 0, 0 })
       }
     // path is removed from dir
     } else {
-      changes = append(changes, FileChange{ "removed", dir+oldPath, oldPath, oldHash, time.Now().String(), false })
+      changes = append(changes, FileChange{ "removed", dir+oldPath, oldPath, oldHash, false, 0, 0 })
     }
   }
 
@@ -169,7 +169,7 @@ func FindPathHashMapChange(new map[string]string, old map[string]string, dir str
       if err != nil {
         return nil, err
       }
-      changes = append(changes, FileChange{ "added", dir+newPath, newPath, newHash, time.Now().String(), ok })
+      changes = append(changes, FileChange{ "added", dir+newPath, newPath, newHash, ok, 0, 0 })
     }
   }
   return changes, nil
@@ -182,7 +182,10 @@ func HashFile(filePath string) (string, error) {
     return "", err
   }
   if fi.Mode().IsRegular() {
-    hash = Sha256DirObj(filePath)
+    hash, err = Sha256DirObj(filePath)
+    if err != nil {
+      return "", err
+    }
   } else {
     return "", nil
   }

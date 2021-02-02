@@ -4,6 +4,7 @@ import (
 	"time"
 	"strconv"
 	"os"
+  "math/rand"
 	"fmt"
 
 	"goMinSync/pkg/remoteCacheToGo/cacheClient"
@@ -24,7 +25,7 @@ type syncClient struct {
 
 func New() syncClient {
 	var sC syncClient
-	sC.fileWatcherSyncFreq = time.Second * 5
+	sC.fileWatcherSyncFreq = time.Second * 1
 	sC.ChangeStream = make(chan util.FileChange)
 	return sC
 }
@@ -49,112 +50,157 @@ func (sC *syncClient)ConnectToRemoteInstance(address string, syncPort int, fileS
 	} else {
 		sC.tlsEnabled = true
 	}
+
+	if err := sC.StartSyncToRemote(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func (sC *syncClient)StartSyncToRemote() {
+func (sC *syncClient)StartSyncToRemote() error {
 	var (
 		err error
 		encodedChg []byte
+		url string
 	)
-	go func() {
+	go func() error {
 		for {
 			select {
 			case chg := <- sC.ChangeStream:
 				encodedChg, err = util.EncodeMsg(&chg)
 				if err != nil {
-					return
+					return err
 				}
-				fmt.Println(chg.Ctype + ":" + chg.RelPath)
+				url = ""
+				if sC.tlsEnabled {
+					url = "http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token="+sC.token+"&name="+chg.FileHash
+				} else {
+					url = "http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token=empty"+"&name="+chg.FileHash
+				}
+				_, err = os.Stat(chg.AbsPath)
+				if !chg.IsDir && err == nil {
+					_, err := util.PostUploadFile(url, chg.AbsPath, "file")
+					if err != nil {
+						return err
+					}
+				}
 				// writing to connected cache to key Dir-Path with value change-type
 				sC.cacheClient.AddValByKey(chg.RelPath, encodedChg)
-				if sC.tlsEnabled {
-					if !chg.IsDir {
-						_, err := util.PostUploadFile("http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token="+sC.token+"&name="+chg.FileHash, chg.AbsPath, "file")
-						if err != nil {
-							return
-						}
-					}
-				} else {
-					if !chg.IsDir {
-						_, err := util.PostUploadFile("http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token=empty"+"&name="+chg.FileHash, chg.AbsPath, "file")
-						if err != nil {
-							return
-						}
-					}
-				}
 			}
 		}
 	}()
+	return nil
 }
 
-func (sC *syncClient)StartSyncFromRemote(dir string) {
+func (sC *syncClient)StartSyncFromRemote(dir string, syncGroup int, clientOrigin int) error {
 	var (
 		dirPath string
+		url string
 	)
 	changeMsg := new(util.FileChange)
 	subCh := sC.cacheClient.Subscribe()
-	go func() {
+	go func() error {
 		for {
 			select {
-			case changed := <- subCh:
-				if err := util.DecodeMsg(changeMsg, changed.Data); err != nil {
-					return
+			case dbSub := <- subCh:
+				if err := util.DecodeMsg(changeMsg, dbSub.Data); err != nil {
+					return err
 				}
-				dirPath = changed.Key
-				switch changeMsg.Ctype {
-				case "changed":
-					fmt.Println("sub receive: " + changeMsg.Ctype + ": " + dirPath)
-				case "removed":
-					if _, err := os.Stat(dir+changeMsg.RelPath); err == nil {
-						err := os.Remove(dir+changeMsg.RelPath)
-						if err != nil {
-						    fmt.Println(err)
-						}
-						fmt.Println("sub receive: " + changeMsg.Ctype + ": " + dirPath)
-					}
-				case "added":
-					if _, err := os.Stat(dir+changeMsg.RelPath); os.IsNotExist(err) {
-						if changeMsg.IsDir {
-							os.MkdirAll(dir+changeMsg.RelPath, os.ModePerm)
-						} else {
-							if sC.tlsEnabled {
-								util.DownloadFile(dir+changeMsg.RelPath, "https://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/files/"+changeMsg.FileHash+"?token="+sC.token)
-							} else {
-								util.DownloadFile(dir+changeMsg.RelPath, "http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/"+changeMsg.FileHash+"?token=empty")
+				if changeMsg.SyncGroup == syncGroup && changeMsg.OriginId != clientOrigin {
+					fmt.Println(changeMsg.OriginId)
+					dirPath = dbSub.Key
+					switch changeMsg.Ctype {
+					case "changed":
+						if _, err := os.Stat(dir+changeMsg.RelPath); err == nil {
+							err := os.Remove(dir+changeMsg.RelPath)
+							if err != nil {
+							    return err
 							}
-							fmt.Println("sub receive: " + changeMsg.Ctype + ": " + dirPath)
 						}
-					} else {
-						fmt.Println("exists already")
+						url = ""
+						if _, err := os.Stat(dir+changeMsg.RelPath); os.IsNotExist(err) {
+							if changeMsg.IsDir {
+								os.MkdirAll(dir+changeMsg.RelPath, os.ModePerm)
+							} else {
+								if sC.tlsEnabled {
+									url = "https://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/files/"+changeMsg.FileHash+"?token="+sC.token
+								} else {
+									url = "http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/files/"+changeMsg.FileHash+"?token=empty"
+								}
+								if err := util.DownloadFile(dir+changeMsg.RelPath, url); err != nil {
+									return err
+								}
+							}
+						}
+					case "removed":
+						if _, err := os.Stat(dir+changeMsg.RelPath); err == nil {
+							err := os.Remove(dir+changeMsg.RelPath)
+							if err != nil {
+								return err
+							}
+						}
+					case "added":
+						url = ""
+						if _, err := os.Stat(dir+changeMsg.RelPath); os.IsNotExist(err) {
+							if changeMsg.IsDir {
+								os.MkdirAll(dir+changeMsg.RelPath, os.ModePerm)
+							} else {
+								if sC.tlsEnabled {
+									url = "https://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/files/"+changeMsg.FileHash+"?token="+sC.token
+								} else {
+									url = "http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/files/"+changeMsg.FileHash+"?token=empty"
+								}
+								if err := util.DownloadFile(dir+changeMsg.RelPath, url); err != nil {
+									return err
+								}
+							}
+						}
 					}
 				}
 			}
 		}
 	}()
+	return nil
 }
 
-func (sc *syncClient)AddDir(dir string) {
-  go func() {
+func (sc *syncClient)ChangeListener(dir string, syncGroup int, clientOrigin int) error {
+  go func() error {
     oldPathHashMap := make(map[string]string, 0)
     pathHashMap := make(map[string]string, 0)
     var err error
     for {
       pathHashMap, err = util.CreatePathHashMap(dir)
       if err != nil {
-				return
+				return err
       }
-
       changes, err := util.FindPathHashMapChange(pathHashMap, oldPathHashMap, dir)
 			if err != nil {
-				fmt.Println(err)
+				return err
 			}
       oldPathHashMap = pathHashMap
       for _, change := range changes {
+				change.SyncGroup = syncGroup
+				change.OriginId = clientOrigin
         sc.ChangeStream <- change
       }
-      fmt.Println("-----")
       time.Sleep(sc.fileWatcherSyncFreq)
     }
   }()
+	return nil
+}
+
+
+func (sc *syncClient)AddDir(dir string, syncGroup int) error {
+	clientOrigin := rand.Intn(1000)
+	fmt.Println(dir + "-" + strconv.Itoa(clientOrigin))
+
+	// "/Users/luickklippel/Documents/Temp Local"
+	if err := sc.ChangeListener(dir, syncGroup, clientOrigin); err != nil {
+		return err
+	}
+	if err := sc.StartSyncFromRemote(dir, syncGroup, clientOrigin); err != nil {
+		return err
+	}
+	return nil
 }
