@@ -131,7 +131,6 @@ func Sha256DirObj(path string) (string, error) {
   _, err = io.Copy(hasher, file)
   if err != nil {
     // file content is either not hashable or a directory
-    fmt.Println(err)
     return "", err
   }
 	return hex.EncodeToString(hasher.Sum(nil)), nil
@@ -201,7 +200,6 @@ func Hash(toHash []byte) (string, error) {
   _, err := io.Writer(hasher).Write(toHash)
   if err != nil {
     // file content is either not hashable or a directory
-    fmt.Println(err)
     return "", err
   }
 	return hex.EncodeToString(hasher.Sum(nil)), nil
@@ -246,6 +244,9 @@ func CreatePathHashMap(dir string) (map[string]string, error) {
 
   err := filepath.Walk(dir, func(absPath string, f os.FileInfo, err error) error {
     hash, err = HashFile(absPath)
+    if err != nil {
+      return err
+    }
     relPath = absPath[len(dir):]
     if relPath != "" {
       pathHashMap[relPath] = hash
