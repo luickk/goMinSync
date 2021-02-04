@@ -186,7 +186,6 @@ func (sc *syncClient)ChangeListener(dir string, pingPongSync chan util.FileChang
 				pingPongSyncMapMutex.Lock()
 				pingPongSyncMap[dir+ppCh.RelPath] = &ppCh
 				pingPongSyncMapMutex.Unlock()
-				fmt.Println("added")
 			}
 		}
 	}()
@@ -194,12 +193,14 @@ func (sc *syncClient)ChangeListener(dir string, pingPongSync chan util.FileChang
   go func() error {
     oldPathHashMap := make(map[string]string, 0)
     pathHashMap := make(map[string]string, 0)
+		isPong := false
     var err error
     for {
       pathHashMap, err = util.CreatePathHashMap(dir)
       if err != nil {
 				return err
       }
+			isPong = false
       changes, err := util.FindPathHashMapChange(pathHashMap, oldPathHashMap, dir)
 			if err != nil {
 				return err
@@ -209,19 +210,17 @@ func (sc *syncClient)ChangeListener(dir string, pingPongSync chan util.FileChang
 				change.SyncGroup = syncGroup
 				change.OriginId = clientOrigin
 
-				sc.ChangeStream <- change
 				pingPongSyncMapMutex.Lock()
 				for absPath, ppChange := range pingPongSyncMap {
 					if absPath == ppChange.AbsPath && change.FileHash == ppChange.FileHash && ppChange.Ctype == change.Ctype {
-						fmt.Println("prohibited")
 						delete(pingPongSyncMap, absPath)
-					} else {
-						sc.ChangeStream <- change
-						fmt.Println("not pr..")
+						isPong = true
 					}
 				}
-				if len(pingPongSyncMap) == 0 {
-						sc.ChangeStream <- change
+				if len(pingPongSyncMap) == 0 || !isPong {
+					sc.ChangeStream <- change
+				} else {
+					fmt.Println("dasds")
 				}
 				pingPongSyncMapMutex.Unlock()
 
