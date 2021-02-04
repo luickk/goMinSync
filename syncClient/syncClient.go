@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"os"
   "math/rand"
+  "sync"
 	"fmt"
 
 	"goMinSync/pkg/remoteCacheToGo/cacheClient"
@@ -72,7 +73,6 @@ func (sC *syncClient)StartSyncToRemote() error {
 				if err != nil {
 					return err
 				}
-				url = ""
 				if sC.tlsEnabled {
 					url = "http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token="+sC.token+"&name="+chg.FileHash
 				} else {
@@ -80,13 +80,13 @@ func (sC *syncClient)StartSyncToRemote() error {
 				}
 				_, err = os.Stat(chg.AbsPath)
 				if !chg.IsDir && err == nil {
-					go func() error {
-						_, err := util.PostUploadFile(url, chg.AbsPath, "file")
+					go func(absPath string, url string) error {
+						_, err := util.PostUploadFile(url, absPath, "file")
 						if err != nil {
 							return err
 						}
 						return nil
-					}()
+					}(chg.AbsPath, url)
 				}
 				// writing to connected cache to key Dir-Path with value change-type
 				sC.cacheClient.AddValByKey(chg.RelPath, encodedChg)
@@ -113,6 +113,7 @@ func (sC *syncClient)SyncFromRemote(dir string, pingPongSync chan util.FileChang
 				}
 				absPath = dir+changeMsg.RelPath
 				if changeMsg.SyncGroup == syncGroup && changeMsg.OriginId != clientOrigin {
+					pingPongSync <- *changeMsg
 					dirPath = dbSub.Key
 					switch changeMsg.Ctype {
 					case "changed":
@@ -132,12 +133,12 @@ func (sC *syncClient)SyncFromRemote(dir string, pingPongSync chan util.FileChang
 								} else {
 									url = "http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/files/"+changeMsg.FileHash+"?token=empty"
 								}
-								go func() error {
+								go func(absPath string, url string) error {
 									if err := util.DownloadFile(absPath, url); err != nil {
 										return err
 									}
 									return nil
-								}()
+								}(absPath, url)
 							}
 						}
 					case "removed":
@@ -158,17 +159,16 @@ func (sC *syncClient)SyncFromRemote(dir string, pingPongSync chan util.FileChang
 								} else {
 									url = "http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/files/"+changeMsg.FileHash+"?token=empty"
 								}
-								go func() error {
+								go func(absPath string, url string) error {
 									if err := util.DownloadFile(absPath, url); err != nil {
 										return err
 									}
 									return nil
-								}()
+								}(absPath, url)
 							}
 						}
 					}
 				}
-				// pingPongSync <- *changeMsg
 			}
 		}
 	}()
@@ -176,13 +176,20 @@ func (sC *syncClient)SyncFromRemote(dir string, pingPongSync chan util.FileChang
 }
 
 func (sc *syncClient)ChangeListener(dir string, pingPongSync chan util.FileChange, syncGroup int, clientOrigin int) error {
-	// pingPongSyncMap := make(map[string]*util.FileChange)
-	// go func() {
-	// 	select {
-	// 	case ppCh := <- pingPongSync:
-	// 		pingPongSyncMap[dir+ppCh.RelPath] = &ppCh
-	// 	}
-	// }()
+	pingPongSyncMap := make(map[string]*util.FileChange)
+	pingPongSyncMapMutex := &sync.Mutex{}
+
+	go func() {
+		for {
+			select {
+			case ppCh := <- pingPongSync:
+				pingPongSyncMapMutex.Lock()
+				pingPongSyncMap[dir+ppCh.RelPath] = &ppCh
+				pingPongSyncMapMutex.Unlock()
+				fmt.Println("added")
+			}
+		}
+	}()
 
   go func() error {
     oldPathHashMap := make(map[string]string, 0)
@@ -201,16 +208,23 @@ func (sc *syncClient)ChangeListener(dir string, pingPongSync chan util.FileChang
       for _, change := range changes {
 				change.SyncGroup = syncGroup
 				change.OriginId = clientOrigin
-				sc.ChangeStream <- change
 
-				// for absPath, ppChange := range pingPongSyncMap {
-				// 	if absPath == ppChange.AbsPath && change.FileHash == ppChange.FileHash {
-				// 		fmt.Println("prohibited")
-				// 		delete(pingPongSyncMap, absPath)
-				// 	} else {
-	      //   	sc.ChangeStream <- change
-				// 	}
-				// }
+				sc.ChangeStream <- change
+				pingPongSyncMapMutex.Lock()
+				for absPath, ppChange := range pingPongSyncMap {
+					if absPath == ppChange.AbsPath && change.FileHash == ppChange.FileHash && ppChange.Ctype == change.Ctype {
+						fmt.Println("prohibited")
+						delete(pingPongSyncMap, absPath)
+					} else {
+						sc.ChangeStream <- change
+						fmt.Println("not pr..")
+					}
+				}
+				if len(pingPongSyncMap) == 0 {
+						sc.ChangeStream <- change
+				}
+				pingPongSyncMapMutex.Unlock()
+
 				fmt.Println(clientOrigin)
       }
       time.Sleep(sc.fileWatcherSyncFreq)
