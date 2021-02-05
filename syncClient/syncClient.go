@@ -200,27 +200,26 @@ func (sc *syncClient)ChangeListener(dir string, pingPongSync chan util.FileChang
       if err != nil {
 				return err
       }
-			isPong = false
       changes, err := util.FindPathHashMapChange(pathHashMap, oldPathHashMap, dir)
 			if err != nil {
 				return err
 			}
       oldPathHashMap = pathHashMap
       for _, change := range changes {
+
+				isPong = false
 				change.SyncGroup = syncGroup
 				change.OriginId = clientOrigin
 
 				pingPongSyncMapMutex.Lock()
 				for absPath, ppChange := range pingPongSyncMap {
-					if absPath == ppChange.AbsPath && change.FileHash == ppChange.FileHash && ppChange.Ctype == change.Ctype {
+					if change.RelPath == ppChange.RelPath && change.FileHash == ppChange.FileHash && ppChange.Ctype == change.Ctype {
 						delete(pingPongSyncMap, absPath)
 						isPong = true
 					}
 				}
-				if len(pingPongSyncMap) == 0 || !isPong {
+				if !isPong {
 					sc.ChangeStream <- change
-				} else {
-					fmt.Println("dasds")
 				}
 				pingPongSyncMapMutex.Unlock()
 
