@@ -6,7 +6,6 @@ import (
 	"os"
   "math/rand"
   "sync"
-	"fmt"
 
 	"goMinSync/pkg/remoteCacheToGo/cacheClient"
   "goMinSync/pkg/util"
@@ -220,9 +219,11 @@ func (sc *syncClient)ChangeListener(dir string, pingPongSync chan util.FileChang
 				pingPongSyncMapMutex.RUnlock()
 				if !isPong {
 					sc.ChangeStream <- change
-				}
 
-				fmt.Println(clientOrigin)
+					pingPongSyncMapMutex.Lock()
+					delete(pingPongSyncMap, change.AbsPath)
+					pingPongSyncMapMutex.Unlock()
+				}
       }
       time.Sleep(sc.fileWatcherSyncFreq)
     }

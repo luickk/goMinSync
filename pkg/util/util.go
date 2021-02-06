@@ -12,6 +12,8 @@ import (
   "bytes"
   "os"
   "fmt"
+
+
   "io"
 )
 
@@ -123,7 +125,7 @@ func DownloadFile(filepath string, url string) (err error) {
 func Sha256DirObj(path string) (string, error) {
   file, err := os.Open(path)
   if err != nil {
-    fmt.Println(err)
+    return "", err
   }
   defer file.Close()
   hasher := sha256.New()
