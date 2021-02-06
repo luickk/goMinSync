@@ -177,7 +177,7 @@ func (sC *syncClient)SyncFromRemote(dir string, pingPongSync chan util.FileChang
 
 func (sc *syncClient)ChangeListener(dir string, pingPongSync chan util.FileChange, syncGroup int, clientOrigin int) error {
 	pingPongSyncMap := make(map[string]*util.FileChange)
-	pingPongSyncMapMutex := &sync.Mutex{}
+	pingPongSyncMapMutex := &sync.RWMutex{}
 
 	go func() {
 		for {
@@ -211,17 +211,16 @@ func (sc *syncClient)ChangeListener(dir string, pingPongSync chan util.FileChang
 				change.SyncGroup = syncGroup
 				change.OriginId = clientOrigin
 
-				pingPongSyncMapMutex.Lock()
-				for absPath, ppChange := range pingPongSyncMap {
+				pingPongSyncMapMutex.RLock()
+				for _, ppChange := range pingPongSyncMap {
 					if change.RelPath == ppChange.RelPath && change.FileHash == ppChange.FileHash && ppChange.Ctype == change.Ctype {
-						delete(pingPongSyncMap, absPath)
 						isPong = true
 					}
 				}
+				pingPongSyncMapMutex.RUnlock()
 				if !isPong {
 					sc.ChangeStream <- change
 				}
-				pingPongSyncMapMutex.Unlock()
 
 				fmt.Println(clientOrigin)
       }
