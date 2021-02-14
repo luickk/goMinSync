@@ -3,12 +3,15 @@ package util
 import (
   "crypto/sha256"
 	"encoding/hex"
+	"crypto/tls"
+	"crypto/x509"
   "encoding/json"
   "net/http"
   "mime/multipart"
   "io/ioutil"
   "path/filepath"
 
+  "errors"
   "bytes"
   "os"
   "fmt"
@@ -45,7 +48,24 @@ func DecodeMsg(msg *FileChange, data []byte) error {
 }
 
 // by https://stackoverflow.com/questions/51234464/upload-a-file-with-post-request-golang
-func PostUploadFile(url string, filePath string, filetype string) ([]byte, error) {
+func PostUploadFile(url string, filePath string, filetype string, cert string) ([]byte, error) {
+  var client *http.Client
+  if cert != "" {
+    // creating and appending new cert pool with x509 standard
+  	roots := x509.NewCertPool()
+  	ok := roots.AppendCertsFromPEM([]byte(cert))
+  	if !ok {
+  		return []byte{}, errors.New("failed to parse root certificate")
+  	}
+  	// initing conifiguration for TLS connection
+  	tlsConfig := &tls.Config{RootCAs: roots}
+
+    transport := &http.Transport{TLSClientConfig: tlsConfig}
+  	client = &http.Client{Transport: transport}
+  } else {
+    client = &http.Client{}
+  }
+
   file, err := os.Open(filePath)
 
   if err != nil {
@@ -71,7 +91,6 @@ func PostUploadFile(url string, filePath string, filetype string) ([]byte, error
   }
 
   request.Header.Add("Content-Type", writer.FormDataContentType())
-  client := &http.Client{}
 
   response, err := client.Do(request)
 
@@ -90,7 +109,24 @@ func PostUploadFile(url string, filePath string, filetype string) ([]byte, error
 }
 
 // by https://stackoverflow.com/questions/11692860/how-can-i-efficiently-download-a-large-file-using-go
-func DownloadFile(filepath string, url string) (err error) {
+func DownloadFile(filepath string, url string, cert string) (err error) {
+  var client *http.Client
+  if cert != "" {
+    // creating and appending new cert pool with x509 standard
+    roots := x509.NewCertPool()
+    ok := roots.AppendCertsFromPEM([]byte(cert))
+    if !ok {
+      return errors.New("failed to parse root certificate")
+    }
+    // initing conifiguration for TLS connection
+    tlsConfig := &tls.Config{RootCAs: roots}
+
+    transport := &http.Transport{TLSClientConfig: tlsConfig}
+    client = &http.Client{Transport: transport}
+  } else {
+    client = &http.Client{}
+  }
+
   // Create the file
   out, err := os.Create(filepath)
   if err != nil  {
@@ -99,7 +135,7 @@ func DownloadFile(filepath string, url string) (err error) {
   defer out.Close()
 
   // Get the data
-  resp, err := http.Get(url)
+  resp, err := client.Get(url)
   if err != nil {
     return err
   }

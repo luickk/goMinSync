@@ -49,18 +49,22 @@ func (instance serverInstance) StartInstance() error {
 
 	if instance.tlsCert != "" && instance.tlsCert != "" {
 		// params: port int, bindAddress string, pwHash string, dosProtection bool, serverCert string, serverKey string
-		go instance.cache.RemoteTlsConnHandler(instance.syncPort, instance.address, instance.token, false, instance.tlsCert, instance.tlsKey)
+		go func(cache cache.Cache, syncPort int, address string, token string, dosProtection bool, tlsCert string, tlsKey string) error {
+			return cache.RemoteTlsConnHandler(syncPort, address, token, dosProtection, tlsCert, tlsKey)
+		}(instance.cache, instance.syncPort, instance.address, instance.token, false, instance.tlsCert, instance.tlsKey)
 
 		cert, err := tls.X509KeyPair([]byte(instance.tlsCert), []byte(instance.tlsKey))
 		if err != nil {
 			return err
 		}
-		tlsConnServer := http.Server{
+
+		tlsConnServer := http.Server {
+			Addr:      instance.address+":"+strconv.Itoa(instance.fileServerPort),
 			TLSConfig: &tls.Config{
 				Certificates: []tls.Certificate{cert},
 			},
 		}
-		if err := tlsConnServer.ListenAndServeTLS(instance.address+":"+strconv.Itoa(instance.fileServerPort), ""); err != nil {
+		if err := tlsConnServer.ListenAndServeTLS("", ""); err != nil {
 			return err
 		}
 	} else {

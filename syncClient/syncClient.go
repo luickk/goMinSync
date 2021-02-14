@@ -17,6 +17,7 @@ type syncClient struct {
 	token string
 	fileServerPort int
 	tlsEnabled bool
+	cert string
 
 	cacheClient cacheClient.RemoteCache
 	ChangeStream chan util.FileChange
@@ -31,21 +32,22 @@ func New() syncClient {
 }
 
 // if token and cert are empty cache & file server will not be encrypted nor token protected
-func (sC *syncClient)ConnectToRemoteInstance(address string, syncPort int, fileServerPort int, token string, rootCert string) error {
+func (sC *syncClient)ConnectToRemoteInstance(address string, syncPort int, fileServerPort int, token string, cert string) error {
 	// unencryptd (for testing purposes)
 	client := cacheClient.New()
 
-	if err := client.ConnectToCache(address, syncPort, token, rootCert); err != nil {
+	if err := client.ConnectToCache(address, syncPort, token, cert); err != nil {
 		return err
 	}
 
+	sC.cert = cert
 	sC.token = token
   sC.cacheClient = client
 	sC.address = address
 	sC.syncPort = syncPort
 	sC.fileServerPort = fileServerPort
 
-	if token == "" && rootCert == "" {
+	if token == "" && cert == "" {
 		sC.tlsEnabled = false
 	} else {
 		sC.tlsEnabled = true
@@ -73,14 +75,14 @@ func (sC *syncClient)StartSyncToRemote() error {
 					return err
 				}
 				if sC.tlsEnabled {
-					url = "http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token="+sC.token+"&name="+chg.FileHash
+					url = "https://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token="+sC.token+"&name="+chg.FileHash
 				} else {
 					url = "http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/upload?token=empty"+"&name="+chg.FileHash
 				}
 				_, err = os.Stat(chg.AbsPath)
 				if !chg.IsDir && err == nil {
 					go func(absPath string, url string) error {
-						_, err := util.PostUploadFile(url, absPath, "file")
+						_, err := util.PostUploadFile(url, absPath, "file", sC.cert)
 						if err != nil {
 							return err
 						}
@@ -133,7 +135,7 @@ func (sC *syncClient)SyncFromRemote(dir string, pingPongSync chan util.FileChang
 									url = "http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/files/"+changeMsg.FileHash+"?token=empty"
 								}
 								go func(absPath string, url string) error {
-									if err := util.DownloadFile(absPath, url); err != nil {
+									if err := util.DownloadFile(absPath, url, sC.cert); err != nil {
 										return err
 									}
 									return nil
@@ -159,7 +161,7 @@ func (sC *syncClient)SyncFromRemote(dir string, pingPongSync chan util.FileChang
 									url = "http://"+sC.address+":"+strconv.Itoa(sC.fileServerPort)+"/files/"+changeMsg.FileHash+"?token=empty"
 								}
 								go func(absPath string, url string) error {
-									if err := util.DownloadFile(absPath, url); err != nil {
+									if err := util.DownloadFile(absPath, url, sC.cert); err != nil {
 										return err
 									}
 									return nil
