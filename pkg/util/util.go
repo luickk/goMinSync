@@ -15,8 +15,6 @@ import (
   "bytes"
   "os"
   "fmt"
-
-
   "io"
 )
 
@@ -145,7 +143,7 @@ func DownloadFile(filepath string, url string, cert string) (err error) {
   if resp.StatusCode != http.StatusOK {
     return fmt.Errorf("bad status: %s", resp.Status)
   }
-
+  fmt.Println(resp.Body)
   // Writer the body to file
   _, err = io.Copy(out, resp.Body)
   if err != nil  {
