@@ -36,11 +36,7 @@ func (sC *syncClient)ConnectToRemoteInstance(address string, syncPort int, fileS
 	// unencryptd (for testing purposes)
 	client := cacheClient.New()
 
-	if err := client.ConnectToCache(address, syncPort, token, cert, errorStream); err != nil {
-		errorStream <- err
-		return
-	}
-
+	client.ConnectToCache(address, syncPort, token, cert, errorStream)
 	sC.cert = cert
 	sC.token = token
   sC.cacheClient = client

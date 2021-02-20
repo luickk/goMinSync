@@ -31,18 +31,15 @@ var (
 // Server represents a simple-upload server.
 type Server struct {
 	DocumentRoot string
-	// MaxUploadSize limits the size of the uploaded content, specified with "byte".
-	MaxUploadSize int64
 	TokenEnabled bool
 	SecureToken string
 	EnableCORS bool
 }
 
 // NewServer creates a new simple-upload server.
-func NewServer(documentRoot string, maxUploadSize int64, tokenEnabled bool, token string, enableCORS bool) Server {
+func NewServer(documentRoot string, tokenEnabled bool, token string, enableCORS bool) Server {
 	return Server{
 		DocumentRoot: documentRoot,
-		MaxUploadSize: maxUploadSize,
 		TokenEnabled: tokenEnabled,
 		SecureToken: token,
 		EnableCORS: enableCORS,
@@ -73,11 +70,6 @@ func (s Server) handlePost(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		writeError(w, err)
-		return
-	}
-	if size > s.MaxUploadSize {
-		w.WriteHeader(http.StatusRequestEntityTooLarge)
-		writeError(w, errors.New("uploaded file size exceeds the limit"))
 		return
 	}
 
@@ -156,18 +148,6 @@ func (s Server) handlePut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer srcFile.Close()
-
-	size, err := getSize(srcFile)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		writeError(w, err)
-		return
-	}
-	if size > s.MaxUploadSize {
-		w.WriteHeader(http.StatusRequestEntityTooLarge)
-		writeError(w, errors.New("uploaded file size exceeds the limit"))
-		return
-	}
 
 	_, err = io.Copy(tempFile, srcFile)
 	if err != nil {
